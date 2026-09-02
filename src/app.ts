@@ -10,6 +10,7 @@ import dashboardRoutes from './routes/dashboard.routes.js';
 import uploadRoutes from './routes/upload.routes.js';
 import lookupRoutes from './routes/lookup.routes.js';
 import accountPayableRoutes from './routes/accountPayable.routes.js';
+import bankImportRoutes from './routes/bankImport.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 export function createApp() {
@@ -33,6 +34,7 @@ export function createApp() {
   app.use('/imports', uploadRoutes);
   app.use('/lookups', lookupRoutes);
   app.use('/accounts-payable', accountPayableRoutes);
+  app.use('/bank-imports', bankImportRoutes);
 
   app.use(errorHandler);
 

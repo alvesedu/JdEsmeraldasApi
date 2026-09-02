@@ -1,0 +1,17 @@
+BANCO DO BRASIL
+Extrato de Conta Corrente
+Cliente: CONDOMINIO MODELO
+Periodo: 01/08/2026 a 31/08/2026
+Agencia: 1234-5 Conta: 12345-6
+Saldo Anterior 1.000,00 C
+Lancamentos
+03/08/2026 0000 123456 250,00 (+)
+Pix - Recebido
+01/08 08:59 Artur Exemplo
+07/08/2026 0000 123457 1.810,00 (-)
+Pix - Enviado
+07/08 12:10 Fornecedor Exemplo 123.456.789-00
+10/08/2026 0000 123458 500,00 C
+Transferencia recebida
+10/08 10:15 Maria Exemplo
+Saldo Final 60,00 D
