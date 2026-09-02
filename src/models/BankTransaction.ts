@@ -27,7 +27,12 @@ const bankTransactionSchema = new Schema(
     },
     fingerprint: { type: String, required: true, unique: true, index: true },
     rawData: { type: Schema.Types.Mixed, default: null },
-    processingStatus: { type: String, enum: ['PENDING', 'SUGGESTED', 'CONFIRMED'], default: 'PENDING' }
+    processingStatus: {
+      type: String,
+      enum: ['UNMATCHED', 'PARTIALLY_MATCHED', 'MATCHED'],
+      default: 'UNMATCHED',
+      index: true
+    }
   },
   { timestamps: true }
 );

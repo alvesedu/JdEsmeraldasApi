@@ -94,7 +94,7 @@ export async function processBankImport(file: UploadedPdf, userId: Types.ObjectI
                   transactionType: transaction.transactionType,
                   fingerprint: transaction.fingerprint,
                   rawData: transaction.rawData,
-                  processingStatus: 'PENDING'
+              processingStatus: 'UNMATCHED'
                 }
               },
               upsert: true

@@ -3,6 +3,7 @@ import { Resident } from '../models/Resident.js';
 import { buildUnitKey } from '../utils/normalize.js';
 import { getCurrentPricingValue } from '../services/pricing.service.js';
 import { AppError } from '../utils/AppError.js';
+import { getUnitOpenCharges } from '../services/creditReconciliation.service.js';
 import type { NextFunction, Request, Response } from 'express';
 
 export async function listUnits(_req: Request, res: Response) {
@@ -42,4 +43,8 @@ export async function getUnit(req: Request, res: Response, next: NextFunction) {
   } catch (error) {
     next(error);
   }
+}
+
+export async function listOpenCharges(req: Request, res: Response) {
+  res.json({ items: await getUnitOpenCharges(String(req.params.id)) });
 }

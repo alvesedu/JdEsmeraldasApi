@@ -11,6 +11,7 @@ import uploadRoutes from './routes/upload.routes.js';
 import lookupRoutes from './routes/lookup.routes.js';
 import accountPayableRoutes from './routes/accountPayable.routes.js';
 import bankImportRoutes from './routes/bankImport.routes.js';
+import { bankTransactionRouter, paymentAllocationRouter } from './routes/creditReconciliation.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 export function createApp() {
@@ -35,6 +36,8 @@ export function createApp() {
   app.use('/lookups', lookupRoutes);
   app.use('/accounts-payable', accountPayableRoutes);
   app.use('/bank-imports', bankImportRoutes);
+  app.use('/bank-transactions', bankTransactionRouter);
+  app.use('/payment-allocations', paymentAllocationRouter);
 
   app.use(errorHandler);
 

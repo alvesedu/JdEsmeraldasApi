@@ -21,9 +21,9 @@ export const BankDirection = {
 } as const;
 
 export const ProcessingStatus = {
-  PENDING: 'PENDING',
-  SUGGESTED: 'SUGGESTED',
-  CONFIRMED: 'CONFIRMED'
+  UNMATCHED: 'UNMATCHED',
+  PARTIALLY_MATCHED: 'PARTIALLY_MATCHED',
+  MATCHED: 'MATCHED'
 } as const;
 
 export const AccountPayableStatus = {

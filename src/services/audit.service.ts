@@ -1,4 +1,4 @@
-import type { Types } from 'mongoose';
+import type { ClientSession, Types } from 'mongoose';
 import { AuditLog } from '../models/AuditLog.js';
 
 type AuditInput = {
@@ -8,15 +8,16 @@ type AuditInput = {
   entityId: string;
   before?: unknown;
   after?: unknown;
+  session?: ClientSession;
 };
 
 export async function writeAudit(input: AuditInput) {
-  await AuditLog.create({
+  await AuditLog.create([{
     userId: input.userId,
     action: input.action,
     entityType: input.entityType,
     entityId: input.entityId,
     before: input.before ?? null,
     after: input.after ?? null
-  });
+  }], { session: input.session });
 }
