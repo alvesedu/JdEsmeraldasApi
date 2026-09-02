@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import type { ParsedBankTransaction } from '../bankParsers/types.js';
 import {
   calculateTransactionTotals,
+  canReprocessImport,
   determineImportStatus,
   isDuplicateFileHash,
   prepareTransactionBatch,
@@ -29,6 +30,8 @@ describe('bank import rules', () => {
   it('recognizes the same uploaded file hash', () => {
     assert.equal(isDuplicateFileHash('hash-a', 'hash-a'), true);
     assert.equal(isDuplicateFileHash('hash-a', 'hash-b'), false);
+    assert.equal(canReprocessImport('FAILED'), true);
+    assert.equal(canReprocessImport('PROCESSED'), false);
   });
 
   it('does not insert transactions already found in an overlapping statement', () => {

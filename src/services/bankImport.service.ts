@@ -23,9 +23,13 @@ type TransactionWithFingerprint = ParsedBankTransaction & { fingerprint: string 
 export async function processBankImport(file: UploadedPdf, userId: Types.ObjectId) {
   validatePdf(file);
   const fileHash = sha256(file.buffer);
-  const existing = await BankImport.findOne({ fileHash });
-  if (existing && isDuplicateFileHash(fileHash, existing.fileHash)) {
-    return { ...serializeBankImport(existing), duplicateFile: true };
+  const existing = await BankImport.findOne({ fileHash }).select('+storedFilePath');
+  if (
+    existing &&
+    isDuplicateFileHash(fileHash, existing.fileHash) &&
+    !canReprocessImport(existing.processingStatus)
+  ) {
+    return { ...serializeBankImport(existing), duplicateFile: true, reprocessed: false };
   }
 
   const uploadDirectory = path.resolve(env.uploadDir);
@@ -35,15 +39,22 @@ export async function processBankImport(file: UploadedPdf, userId: Types.ObjectI
     if (!isExistingFileError(error)) throw error;
   });
 
-  const item = await BankImport.create({
-    originalFileName: path.basename(file.originalname),
-    storedFilePath,
-    bank: 'UNKNOWN',
-    uploadedBy: userId,
-    fileHash,
-    processingStatus: 'PROCESSING',
-    processingErrors: []
-  });
+  const reprocessed = Boolean(existing);
+  const item =
+    existing ??
+    (await BankImport.create({
+      originalFileName: path.basename(file.originalname),
+      storedFilePath,
+      bank: 'UNKNOWN',
+      uploadedBy: userId,
+      fileHash,
+      processingStatus: 'PROCESSING',
+      processingErrors: []
+    }));
+  if (existing) {
+    item.set({ processingStatus: 'PROCESSING', processingErrors: [], processedAt: null });
+    await item.save();
+  }
 
   try {
     const statement = await parseBankStatement(file.buffer, file.originalname);
@@ -136,7 +147,7 @@ export async function processBankImport(file: UploadedPdf, userId: Types.ObjectI
       processedAt: new Date()
     });
     await item.save();
-    return { ...serializeBankImport(item), duplicateFile: false };
+    return { ...serializeBankImport(item), duplicateFile: false, reprocessed };
   } catch (error) {
     item.set({
       processingStatus: 'FAILED',
@@ -150,7 +161,7 @@ export async function processBankImport(file: UploadedPdf, userId: Types.ObjectI
       ]
     });
     await item.save();
-    return { ...serializeBankImport(item), duplicateFile: false };
+    return { ...serializeBankImport(item), duplicateFile: false, reprocessed };
   }
 }
 
@@ -203,6 +214,10 @@ export function prepareTransactionBatch(
 
 export function isDuplicateFileHash(fileHash: string, existingFileHash: string | null) {
   return existingFileHash !== null && fileHash === existingFileHash;
+}
+
+export function canReprocessImport(status: string) {
+  return status === 'FAILED';
 }
 
 export function calculateTransactionTotals(transactions: Pick<ParsedBankTransaction, 'amount' | 'direction'>[]) {

@@ -75,4 +75,27 @@ describe('Banco do Brasil statement parser', () => {
     assert.equal(parsed.errors.length, 1);
     assert.equal(parsed.errors[0].type, 'UNRECOGNIZED_TRANSACTION_LINE');
   });
+
+  it('supports amount-first rows and compact Banco do Brasil periods without a textual logo', async () => {
+    const layout = [
+      'Extrato de Conta Corrente',
+      'Agencia: 1234-5 Conta: 12345-6 Periodo: 01 a 31/08/2026',
+      'Lancamentos',
+      'Data Documento Valor Lote Historico',
+      '01/08/2026 100,00 (+) Saldo Anterior',
+      '03/08/2026 250,00 (+) 0000 123456',
+      'Pix - Recebido',
+      '01/08 08:59 Pessoa Exemplo',
+      '150,00 (-) Saldo do dia',
+      '31/08/2026 1.645,93 (+) S A L D O',
+      'Total Aplicacoes Financeiras'
+    ].join('\n');
+    const parsed = await parser.parse({ ...input, text: layout });
+    assert.equal(parser.canParse({ ...input, text: layout }), true);
+    assert.deepEqual(parsed.period, { startDate: '2026-08-01', endDate: '2026-08-31' });
+    assert.equal(parsed.transactions.length, 1);
+    assert.equal(parsed.transactions[0].amount, 25_000);
+    assert.equal(parsed.balances.openingBalance, 10_000);
+    assert.equal(parsed.balances.closingBalance, -15_000);
+  });
 });

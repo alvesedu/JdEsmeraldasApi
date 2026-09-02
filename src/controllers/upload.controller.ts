@@ -6,5 +6,5 @@ export async function uploadBankImport(req: Request, res: Response) {
   if (!req.file) throw new AppError('PDF file is required', 400);
   if (!req.user) throw new AppError('Unauthorized', 401);
   const result = await processBankImport(req.file, req.user._id);
-  res.status(result.duplicateFile ? 200 : 201).json(result);
+  res.status(result.duplicateFile || result.reprocessed ? 200 : 201).json(result);
 }
