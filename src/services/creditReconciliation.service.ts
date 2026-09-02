@@ -162,9 +162,13 @@ export async function getCreditReconciliation(id: string) {
   };
 }
 
-export async function getUnitOpenCharges(unitId: string) {
+export async function getUnitOpenCharges(unitId: string, filters: { competence?: string } = {}) {
   if (!(await Unit.exists({ _id: unitId }))) throw new AppError('Unit not found', 404);
-  const charges = await Charge.find({ unitId, openBalance: { $gt: 0 } }).sort({ competence: 1 }).lean();
+  const charges = await Charge.find({
+    unitId,
+    openBalance: { $gt: 0 },
+    ...(filters.competence ? { competence: filters.competence } : {})
+  }).sort({ competence: 1 }).lean();
   return charges.map((charge) => ({
     ...charge,
     paidAmount: charge.valuePaid,

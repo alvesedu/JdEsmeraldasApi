@@ -46,5 +46,6 @@ export async function getUnit(req: Request, res: Response, next: NextFunction) {
 }
 
 export async function listOpenCharges(req: Request, res: Response) {
-  res.json({ items: await getUnitOpenCharges(String(req.params.id)) });
+  const competence = typeof req.query.competence === 'string' ? req.query.competence : undefined;
+  res.json({ items: await getUnitOpenCharges(String(req.params.id), { competence }) });
 }
