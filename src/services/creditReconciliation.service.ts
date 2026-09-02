@@ -6,6 +6,7 @@ import { PaymentAllocation } from '../models/PaymentAllocation.js';
 import { Unit } from '../models/Unit.js';
 import { normalizeBankName } from '../utils/normalize.js';
 import { AppError } from '../utils/AppError.js';
+import { getDatabaseReadiness } from '../config/db.js';
 import { writeAudit } from './audit.service.js';
 
 export type ReconciliationStatus = 'UNMATCHED' | 'PARTIALLY_MATCHED' | 'MATCHED';
@@ -336,11 +337,9 @@ async function allocatedTotals(transactionIds: Types.ObjectId[]) {
 }
 
 async function runInTransaction<T>(work: (session: ClientSession) => Promise<T>) {
-  const database = mongoose.connection.db;
-  if (!database) throw new AppError('Database is not connected', 503);
-  const topology = await database.admin().command({ hello: 1 }) as { setName?: string };
-  if (!topology.setName) {
-    throw new AppError('Atomic reconciliation requires MongoDB configured as a replica set', 503);
+  const readiness = await getDatabaseReadiness();
+  if (!readiness.supportsTransactions) {
+    throw new AppError('Atomic reconciliation requires MongoDB configured as a PRIMARY replica set with transaction support', 503);
   }
   const session = await mongoose.startSession();
   try {

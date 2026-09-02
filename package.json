@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "test": "node --import tsx --test src/**/*.test.ts",
+    "test:transactions": "MONGODB_TEST_URI=mongodb://127.0.0.1:27018/condominio_financeiro_test?replicaSet=rs0 node --import tsx --test src/services/creditReconciliation.integration.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js"

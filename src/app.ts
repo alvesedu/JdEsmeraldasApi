@@ -13,6 +13,7 @@ import accountPayableRoutes from './routes/accountPayable.routes.js';
 import bankImportRoutes from './routes/bankImport.routes.js';
 import { bankTransactionRouter, paymentAllocationRouter } from './routes/creditReconciliation.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { getDatabaseReadiness } from './config/db.js';
 
 export function createApp() {
   const app = express();
@@ -23,8 +24,9 @@ export function createApp() {
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: true }));
 
-  app.get('/health', (_req, res) => {
-    res.json({ ok: true });
+  app.get('/health', async (_req, res) => {
+    const database = await getDatabaseReadiness();
+    res.status(database.supportsTransactions ? 200 : 503).json({ ok: database.supportsTransactions, database });
   });
 
   app.use('/auth', authRoutes);
