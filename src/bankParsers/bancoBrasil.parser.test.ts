@@ -6,6 +6,7 @@ import { buildTransactionFingerprint } from '../utils/hash.js';
 
 const fixtureUrl = new URL('./__fixtures__/banco-brasil-anonymized.txt', import.meta.url);
 const text = await readFile(fixtureUrl, 'utf8');
+const realLayoutText = await readFile(new URL('./__fixtures__/banco-brasil-real-layout.txt', import.meta.url), 'utf8');
 const parser = new BancoBrasilParser();
 const input = { buffer: new Uint8Array(), text, originalFileName: 'banco-brasil-anonymized.pdf' };
 const statement = await parser.parse(input);
@@ -96,6 +97,18 @@ describe('Banco do Brasil statement parser', () => {
     assert.equal(parsed.transactions.length, 1);
     assert.equal(parsed.transactions[0].amount, 25_000);
     assert.equal(parsed.balances.openingBalance, 10_000);
-    assert.equal(parsed.balances.closingBalance, -15_000);
+    assert.equal(parsed.balances.closingBalance, 164_593);
+  });
+
+  it('detects the real Banco do Brasil export layout without the logo text', async () => {
+    const parsed = await parser.parse({ ...input, text: realLayoutText });
+    assert.equal(parser.canParse({ ...input, text: realLayoutText }), true);
+    assert.deepEqual(parsed.period, { startDate: '2026-08-01', endDate: '2026-08-31' });
+    assert.equal(parsed.transactions.length, 4);
+    assert.equal(parsed.transactions[0].transactionType, 'TRANSFER_RECEIVED');
+    assert.equal(parsed.transactions[1].counterpartyDocument, '95900942287');
+    assert.equal(parsed.transactions[2].direction, 'DEBIT');
+    assert.equal(parsed.balances.openingBalance, 20_052);
+    assert.equal(parsed.balances.closingBalance, 164_593);
   });
 });

@@ -1,8 +1,12 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import type { FilterQuery, Types } from 'mongoose';
+import { env } from '../config/env.js';
 import { BankTransaction } from '../models/BankTransaction.js';
 import { Expense } from '../models/Expense.js';
 import { ExpenseCategory } from '../models/ExpenseCategory.js';
 import { AppError } from '../utils/AppError.js';
+import { sha256 } from '../utils/hash.js';
 import { writeAudit } from './audit.service.js';
 
 type ExpenseFilters = {
@@ -22,6 +26,21 @@ type ExpenseInput = {
   attachmentUrl?: string | null;
   classificationStatus?: 'PENDING' | 'SUGGESTED' | 'CONFIRMED';
 };
+
+type UploadedAttachment = {
+  originalname: string;
+  mimetype: string;
+  size: number;
+  buffer: Buffer;
+};
+
+const maximumAttachmentSize = 10 * 1024 * 1024;
+const acceptedAttachmentTypes = new Map([
+  ['application/pdf', '.pdf'],
+  ['image/jpeg', '.jpg'],
+  ['image/png', '.png'],
+  ['image/webp', '.webp']
+]);
 
 export async function listExpenses(filters: ExpenseFilters) {
   const query: FilterQuery<unknown> = {};
@@ -91,6 +110,38 @@ export async function deleteExpense(id: string, userId: Types.ObjectId) {
   return { deleted: true };
 }
 
+export async function attachExpenseFile(id: string, file: UploadedAttachment, userId: Types.ObjectId) {
+  validateAttachment(file);
+  const item = await Expense.findById(id);
+  if (!item) throw new AppError('Expense not found', 404);
+
+  const before = item.toObject();
+  const extension = acceptedAttachmentTypes.get(file.mimetype) ?? path.extname(file.originalname).toLowerCase();
+  const fileHash = sha256(file.buffer);
+  const directory = path.resolve(env.uploadDir, 'expenses');
+  const storedFileName = `${fileHash}${extension}`;
+  await mkdir(directory, { recursive: true });
+  await writeFile(path.join(directory, storedFileName), file.buffer, { flag: 'wx' }).catch((error: unknown) => {
+    if (!isExistingFileError(error)) throw error;
+  });
+
+  item.set({
+    attachmentUrl: `/uploads/expenses/${storedFileName}`,
+    classifiedBy: userId,
+    classifiedAt: new Date()
+  });
+  await item.save();
+  await writeAudit({
+    userId,
+    action: 'EXPENSE_ATTACHMENT_UPLOADED',
+    entityType: 'Expense',
+    entityId: String(item._id),
+    before,
+    after: item.toObject()
+  });
+  return item.populate(['categoryId', 'bankTransactionId', { path: 'classifiedBy', select: 'name' }]);
+}
+
 async function ensureCategory(categoryId: string) {
   if (!(await ExpenseCategory.exists({ _id: categoryId, active: true }))) {
     throw new AppError('Expense category not found', 400);
@@ -119,4 +170,17 @@ function populatedBankTransaction(value: unknown) {
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function validateAttachment(file: UploadedAttachment) {
+  if (!acceptedAttachmentTypes.has(file.mimetype)) {
+    throw new AppError('Only PDF, JPG, PNG and WebP attachments are accepted', 400);
+  }
+  if (file.size <= 0 || file.size > maximumAttachmentSize) {
+    throw new AppError('Attachment must be between 1 byte and 10 MB', 413);
+  }
+}
+
+function isExistingFileError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error && error.code === 'EEXIST';
 }

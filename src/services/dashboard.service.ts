@@ -2,6 +2,7 @@ import { Charge } from '../models/Charge.js';
 import { AccountPayable } from '../models/AccountPayable.js';
 import { BankTransaction } from '../models/BankTransaction.js';
 import { MonthlyClosing } from '../models/MonthlyClosing.js';
+import { PaymentAllocation } from '../models/PaymentAllocation.js';
 import { Unit } from '../models/Unit.js';
 
 export async function buildDashboard(competence: string) {
@@ -15,6 +16,23 @@ export async function buildDashboard(competence: string) {
 
   const revenueForecast = charges.reduce((sum, item) => sum + item.valueOriginal, 0);
   const revenueReceived = charges.reduce((sum, item) => sum + item.valuePaid, 0);
+  const chargeIds = charges.map((item) => item._id);
+  const allocations = chargeIds.length
+    ? await PaymentAllocation.find({ chargeId: { $in: chargeIds }, reversedAt: null }).lean()
+    : [];
+  const referenceDateByChargeId = new Map(charges.map((item) => [String(item._id), item.referenceDate]));
+  const revenueByReference = allocations.reduce(
+    (totals, allocation) => {
+      const referenceDate = referenceDateByChargeId.get(String(allocation.chargeId));
+      if (referenceDate && allocation.paymentDate.getTime() <= referenceDate.getTime()) {
+        totals.beforeRef += allocation.amount;
+      } else {
+        totals.afterRef += allocation.amount;
+      }
+      return totals;
+    },
+    { beforeRef: 0, afterRef: 0 }
+  );
   const pendingUnitsCount = charges.filter((item) => item.openBalance > 0).length;
   const expensePaid = payables
     .filter((item) => item.status !== 'CANCELLED')
@@ -29,6 +47,12 @@ export async function buildDashboard(competence: string) {
     unitsCount: units.length,
     revenueForecast,
     revenueReceived,
+    revenueReceivedBeforeRef: revenueByReference.beforeRef || charges
+      .filter((item) => item.status === 'PAID')
+      .reduce((sum, item) => sum + item.valuePaid, 0),
+    revenueReceivedAfterRef: revenueByReference.afterRef || charges
+      .filter((item) => item.status === 'PAID_AFTER_REFERENCE_DATE')
+      .reduce((sum, item) => sum + item.valuePaid, 0),
     revenuePending: revenueForecast - revenueReceived,
     pendingUnitsCount,
     expensePaid,

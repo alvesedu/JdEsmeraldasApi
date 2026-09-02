@@ -1,0 +1,20 @@
+Extrato de Conta Corrente
+Cliente EVONNILDO COSTA GONCALVES
+Agência: 3702-8 Conta: 46117-2	Período: 01 a 31/08/2026
+Lançamentos
+Dia Documento Valor	Lote Histórico
+31/07/2026 200,52 (+)	Saldo Anterior
+03/08/2026 250,00 (+)	99020 602946000717622 Transferência recebida
+01/08 10:18 RAIMUNDA B S LORENZ
+03/08/2026 250,00 (+)	14397 10859030422071
+Pix - Recebido
+01/08 08:59 95900942287 Artur Ricardo
+07/08/2026 1.810,00 (-)	13105 80701
+Pix - Enviado
+07/08 12:10 Williams Brendo Costa Mar
+160,52 (+)	Saldo do dia
+31/08/2026 250,00 (+)	14397 311823459113901
+Pix - Recebido
+31/08 18:23 05305473250 Ingridy Sophia
+1.645,93 (+)	S A L D O
+Total Aplicações Financeiras

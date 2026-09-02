@@ -65,7 +65,7 @@ export class BancoBrasilParser implements BankStatementParser {
       balances: {
         openingBalance: parseBalance(lines, ['SALDO ANTERIOR', 'SALDO INICIAL']),
         closingBalance:
-          parseBalance(lines, ['SALDO FINAL']) ?? parseBalance(lines, ['SALDO DO DIA'], true)
+          parseBalance(lines, ['SALDO FINAL', 'S A L D O'], true) ?? parseBalance(lines, ['SALDO DO DIA'], true)
       },
       transactions,
       errors,

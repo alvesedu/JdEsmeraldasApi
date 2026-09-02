@@ -1,6 +1,9 @@
 import type { FilterQuery, Types } from 'mongoose';
+import { BankImport } from '../models/BankImport.js';
+import { BankTransaction } from '../models/BankTransaction.js';
 import { MonthlyClosing } from '../models/MonthlyClosing.js';
 import { AppError } from '../utils/AppError.js';
+import { competenceToDateRange } from '../utils/date.js';
 import { writeAudit } from './audit.service.js';
 import { buildDashboard } from './dashboard.service.js';
 
@@ -21,7 +24,10 @@ export async function getMonthlyClosing(competence: string) {
 }
 
 export async function upsertMonthlyClosing(competence: string, notes: string | null, userId: Types.ObjectId) {
-  const snapshot = await buildDashboard(competence);
+  const [snapshot, bankSnapshot] = await Promise.all([
+    buildDashboard(competence),
+    buildBankSnapshot(competence)
+  ]);
   const existing = await MonthlyClosing.findOne({ competence });
   const before = existing?.toObject() ?? null;
   const item = existing ?? new MonthlyClosing({ competence });
@@ -29,18 +35,18 @@ export async function upsertMonthlyClosing(competence: string, notes: string | n
     status: item.status ?? 'OPEN',
     revenueForecast: snapshot.revenueForecast,
     revenueReceived: snapshot.revenueReceived,
-    revenueReceivedBeforeRef: snapshot.revenueReceived,
-    revenueReceivedAfterRef: 0,
+    revenueReceivedBeforeRef: snapshot.revenueReceivedBeforeRef,
+    revenueReceivedAfterRef: snapshot.revenueReceivedAfterRef,
     revenuePending: snapshot.revenuePending,
     pendingUnitsCount: snapshot.pendingUnitsCount,
     expenseForecast: snapshot.openCommitments + snapshot.expensePaid,
-    expensePaid: snapshot.expensePaid,
-    openingBankBalance: 0,
-    bankInflow: snapshot.bankBalance > 0 ? snapshot.bankBalance : 0,
-    bankOutflow: snapshot.bankBalance < 0 ? Math.abs(snapshot.bankBalance) : 0,
-    closingBankBalance: snapshot.bankBalance,
+    expensePaid: bankSnapshot.bankOutflow,
+    openingBankBalance: bankSnapshot.openingBankBalance,
+    bankInflow: bankSnapshot.bankInflow,
+    bankOutflow: bankSnapshot.bankOutflow,
+    closingBankBalance: bankSnapshot.closingBankBalance,
     openCommitments: snapshot.openCommitments,
-    availableBalance: snapshot.availableBalance,
+    availableBalance: bankSnapshot.closingBankBalance - snapshot.openCommitments,
     notes
   });
   await item.save();
@@ -53,6 +59,42 @@ export async function upsertMonthlyClosing(competence: string, notes: string | n
     after: item.toObject()
   });
   return { item };
+}
+
+async function buildBankSnapshot(competence: string) {
+  const { start, end } = competenceToDateRange(competence);
+  const [transactions, openingImport, closingImport] = await Promise.all([
+    BankTransaction.find({
+      $or: [
+        { operationDate: { $gte: start, $lte: end } },
+        { operationDate: null, postingDate: { $gte: start, $lte: end } }
+      ]
+    }).lean(),
+    BankImport.findOne({
+      periodStart: { $lte: start },
+      periodEnd: { $gte: start },
+      openingBalance: { $ne: null }
+    }).sort({ periodStart: 1 }).lean(),
+    BankImport.findOne({
+      periodStart: { $lte: end },
+      periodEnd: { $gte: end },
+      closingBalance: { $ne: null }
+    }).sort({ periodEnd: -1 }).lean()
+  ]);
+  const bankInflow = transactions
+    .filter((transaction) => transaction.direction === 'CREDIT')
+    .reduce((sum, transaction) => sum + transaction.amount, 0);
+  const bankOutflow = transactions
+    .filter((transaction) => transaction.direction === 'DEBIT')
+    .reduce((sum, transaction) => sum + transaction.amount, 0);
+  const openingBankBalance = openingImport?.openingBalance ?? 0;
+  const calculatedClosingBalance = openingBankBalance + bankInflow - bankOutflow;
+  return {
+    openingBankBalance,
+    bankInflow,
+    bankOutflow,
+    closingBankBalance: closingImport?.closingBalance ?? calculatedClosingBalance
+  };
 }
 
 export async function updateMonthlyClosing(competence: string, input: { status?: 'OPEN' | 'CLOSED'; notes?: string | null }, userId: Types.ObjectId) {

@@ -6,6 +6,7 @@ import {
   updateExpenseSchema
 } from '../schemas/expense.schemas.js';
 import {
+  attachExpenseFile,
   createExpense,
   deleteExpense,
   listExpenses,
@@ -35,4 +36,11 @@ export async function remove(req: Request, res: Response) {
   if (!req.user) throw new AppError('Unauthorized', 401);
   const { id } = expenseIdSchema.parse(req.params);
   res.json(await deleteExpense(id, req.user._id));
+}
+
+export async function attachFile(req: Request, res: Response) {
+  if (!req.user) throw new AppError('Unauthorized', 401);
+  if (!req.file) throw new AppError('Attachment file is required', 400);
+  const { id } = expenseIdSchema.parse(req.params);
+  res.status(201).json({ item: await attachExpenseFile(id, req.file, req.user._id) });
 }
