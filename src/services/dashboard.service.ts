@@ -16,11 +16,13 @@ export async function buildDashboard(competence: string) {
   const revenueForecast = charges.reduce((sum, item) => sum + item.valueOriginal, 0);
   const revenueReceived = charges.reduce((sum, item) => sum + item.valuePaid, 0);
   const pendingUnitsCount = charges.filter((item) => item.openBalance > 0).length;
-  const expensePaid = payables.filter((item) => item.status === 'PAID').reduce((sum, item) => sum + item.paidValue, 0);
+  const expensePaid = payables
+    .filter((item) => item.status !== 'CANCELLED')
+    .reduce((sum, item) => sum + item.paidAmount, 0);
   const bankBalance = bankTx.reduce((sum, item) => sum + (item.direction === 'CREDIT' ? item.amount : -item.amount), 0);
   const openCommitments = payables
     .filter((item) => item.status !== 'PAID' && item.status !== 'CANCELLED')
-    .reduce((sum, item) => sum + Math.max(item.expectedValue - item.paidValue, 0), 0);
+    .reduce((sum, item) => sum + item.outstandingAmount, 0);
 
   return {
     competence,
