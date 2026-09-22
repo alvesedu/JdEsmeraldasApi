@@ -4,6 +4,7 @@ import { buildUnitKey } from '../utils/normalize.js';
 import { getCurrentPricingValue } from '../services/pricing.service.js';
 import { AppError } from '../utils/AppError.js';
 import { getUnitOpenCharges } from '../services/creditReconciliation.service.js';
+import { updateUnitAdministrative } from '../services/unit.service.js';
 import type { NextFunction, Request, Response } from 'express';
 
 export async function listUnits(_req: Request, res: Response) {
@@ -26,8 +27,8 @@ export async function createUnit(req: Request, res: Response, next: NextFunction
 
 export async function updateUnit(req: Request, res: Response, next: NextFunction) {
   try {
-    const unit = await Unit.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!unit) throw new AppError('Unit not found', 404);
+    if (!req.user) throw new AppError('Unauthorized', 401);
+    const unit = await updateUnitAdministrative(String(req.params.id), req.body, req.user._id);
     res.json({ item: unit });
   } catch (error) {
     next(error);

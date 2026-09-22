@@ -1,7 +1,7 @@
 import type { ClientSession, Types } from 'mongoose';
 import { AuditLog } from '../models/AuditLog.js';
 
-type AuditInput = {
+export type AuditInput = {
   userId: Types.ObjectId;
   action: string;
   entityType: string;
