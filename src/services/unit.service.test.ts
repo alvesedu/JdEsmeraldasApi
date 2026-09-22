@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { Types } from 'mongoose';
 import { updateUnitSchema } from '../schemas/unit.schemas.js';
-import { updateUnitAdministrative } from './unit.service.js';
+import { updateResidentSchema } from '../schemas/resident.schemas.js';
+import { applyResidentChange, assertResidentCanBeLinked, updateUnitAdministrative } from './unit.service.js';
 import type { AuditInput } from './audit.service.js';
 
 type UnitStatus = 'ATIVA' | 'INATIVA';
@@ -167,3 +168,127 @@ describe('unit patrimonial identity protection', () => {
     assert.deepEqual(unit.residentHistory, before.residentHistory);
   });
 });
+
+describe('unit resident history changes', () => {
+  it('links the first resident and keeps the history open', () => {
+    const unitId = new Types.ObjectId();
+    const joaoId = new Types.ObjectId();
+    const unit = fakeResidentUnit(unitId);
+    const joao = fakeResident(joaoId);
+    const startedAt = new Date('2026-01-01T00:00:00.000Z');
+
+    applyResidentChange(unit, null, joao, startedAt);
+
+    assert.equal(String(unit.residentCurrentId), String(joaoId));
+    assert.equal(String(joao.unitId), String(unitId));
+    assert.equal(unit.residentHistory.length, 1);
+    assert.equal(String(unit.residentHistory[0]?.residentId), String(joaoId));
+    assert.equal(unit.residentHistory[0]?.startedAt, startedAt);
+    assert.equal(unit.residentHistory[0]?.endedAt, null);
+  });
+
+  it('switches Joao to Carlos preserving both history entries', () => {
+    const unitId = new Types.ObjectId();
+    const joaoId = new Types.ObjectId();
+    const carlosId = new Types.ObjectId();
+    const startedAt = new Date('2025-01-01T00:00:00.000Z');
+    const changedAt = new Date('2026-08-01T00:00:00.000Z');
+    const unit = fakeResidentUnit(unitId, joaoId, [{ residentId: joaoId, startedAt, endedAt: null }]);
+    const joao = fakeResident(joaoId, unitId);
+    const carlos = fakeResident(carlosId);
+
+    applyResidentChange(unit, joao, carlos, changedAt);
+
+    assert.equal(unit.residentHistory.length, 2);
+    assert.equal(unit.residentHistory[0]?.endedAt, changedAt);
+    assert.equal(String(unit.residentHistory[1]?.residentId), String(carlosId));
+    assert.equal(unit.residentHistory[1]?.startedAt, changedAt);
+    assert.equal(unit.residentHistory[1]?.endedAt, null);
+    assert.equal(String(unit.residentCurrentId), String(carlosId));
+    assert.equal(joao.unitId, null);
+    assert.equal(String(carlos.unitId), String(unitId));
+  });
+
+  it('removes the current resident while preserving previous history', () => {
+    const unitId = new Types.ObjectId();
+    const joaoId = new Types.ObjectId();
+    const startedAt = new Date('2025-01-01T00:00:00.000Z');
+    const endedAt = new Date('2026-07-31T00:00:00.000Z');
+    const unit = fakeResidentUnit(unitId, joaoId, [{ residentId: joaoId, startedAt, endedAt: null }]);
+    const joao = fakeResident(joaoId, unitId);
+
+    applyResidentChange(unit, joao, null, endedAt);
+
+    assert.equal(unit.residentCurrentId, null);
+    assert.equal(joao.unitId, null);
+    assert.equal(unit.residentHistory.length, 1);
+    assert.equal(unit.residentHistory[0]?.endedAt, endedAt);
+  });
+
+  it('rejects moving a resident already linked to another unit', () => {
+    const targetUnitId = new Types.ObjectId();
+    const anotherUnitId = new Types.ObjectId();
+
+    assert.throws(() => assertResidentCanBeLinked({ unitId: anotherUnitId }, String(targetUnitId)), /already linked/);
+  });
+
+  it('rejects unitId in generic resident update', () => {
+    assert.throws(() => updateResidentSchema.parse({ name: 'Joao', unitId: String(new Types.ObjectId()) }), /unitId|Unrecognized/i);
+  });
+
+  it('rejects unknown fields in generic resident update', () => {
+    assert.throws(() => updateResidentSchema.parse({ name: 'Joao', unexpected: true }), /unexpected|Unrecognized/i);
+  });
+
+  it('keeps financial history objects intact after resident change', () => {
+    const unitId = new Types.ObjectId();
+    const joaoId = new Types.ObjectId();
+    const carlosId = new Types.ObjectId();
+    const unit = fakeResidentUnit(unitId, joaoId, [{ residentId: joaoId, startedAt: new Date('2026-01-01T00:00:00.000Z'), endedAt: null }]);
+    const joao = fakeResident(joaoId, unitId);
+    const carlos = fakeResident(carlosId);
+    const charges = [{ unitId, competence: '2026-07', valueOriginal: 25_000, valuePaid: 0, openBalance: 25_000 }];
+    const allocations = [{ unitId, amount: 10_000, reversedAt: null }];
+
+    applyResidentChange(unit, joao, carlos, new Date('2026-08-01T00:00:00.000Z'));
+
+    assert.deepEqual(charges, [{ unitId, competence: '2026-07', valueOriginal: 25_000, valuePaid: 0, openBalance: 25_000 }]);
+    assert.deepEqual(allocations, [{ unitId, amount: 10_000, reversedAt: null }]);
+  });
+
+  it('does not mutate state when a pre-change validation fails', () => {
+    const unitId = new Types.ObjectId();
+    const joaoId = new Types.ObjectId();
+    const anotherUnitId = new Types.ObjectId();
+    const unit = fakeResidentUnit(unitId);
+    const snapshot = structuredClone({
+      residentCurrentId: unit.residentCurrentId,
+      residentHistory: unit.residentHistory
+    });
+
+    assert.throws(() => assertResidentCanBeLinked({ unitId: anotherUnitId }, String(unitId)), /already linked/);
+
+    assert.equal(unit.residentCurrentId, snapshot.residentCurrentId);
+    assert.deepEqual(unit.residentHistory, snapshot.residentHistory);
+    assert.notEqual(String(joaoId), String(unit.residentCurrentId));
+  });
+});
+
+function fakeResidentUnit(
+  unitId: Types.ObjectId,
+  residentCurrentId: Types.ObjectId | null = null,
+  residentHistory: Array<{ residentId: Types.ObjectId; startedAt: Date; endedAt: Date | null }> = []
+) {
+  return {
+    _id: unitId,
+    residentCurrentId,
+    residentHistory
+  };
+}
+
+function fakeResident(residentId: Types.ObjectId, unitId: Types.ObjectId | null = null) {
+  return {
+    _id: residentId,
+    unitId
+  };
+}

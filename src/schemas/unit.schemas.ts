@@ -13,4 +13,10 @@ export const updateUnitSchema = z.object({
   status: z.enum(['ATIVA', 'INATIVA'])
 }).strict();
 
+export const changeUnitResidentSchema = z.object({
+  residentId: z.string().min(1).nullable().optional(),
+  effectiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+}).strict();
+
 export type UpdateUnitInput = z.infer<typeof updateUnitSchema>;
+export type ChangeUnitResidentInput = z.infer<typeof changeUnitResidentSchema>;

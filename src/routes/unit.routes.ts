@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { authRequired } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
-import { createUnit, getUnit, listOpenCharges, listUnits, updateUnit } from '../controllers/unit.controller.js';
-import { createUnitSchema, unitIdSchema, updateUnitSchema } from '../schemas/unit.schemas.js';
+import { changeResident, createUnit, getUnit, listOpenCharges, listUnits, updateUnit } from '../controllers/unit.controller.js';
+import { changeUnitResidentSchema, createUnitSchema, unitIdSchema, updateUnitSchema } from '../schemas/unit.schemas.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = Router();
@@ -17,5 +17,6 @@ router.post(
   createUnit
 );
 router.put('/:id', validate({ params: unitIdSchema, body: updateUnitSchema }), updateUnit);
+router.post('/:id/resident', validate({ params: unitIdSchema, body: changeUnitResidentSchema }), asyncHandler(changeResident));
 
 export default router;

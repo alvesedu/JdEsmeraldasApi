@@ -4,7 +4,8 @@ import { buildUnitKey } from '../utils/normalize.js';
 import { getCurrentPricingValue } from '../services/pricing.service.js';
 import { AppError } from '../utils/AppError.js';
 import { getUnitOpenCharges } from '../services/creditReconciliation.service.js';
-import { updateUnitAdministrative } from '../services/unit.service.js';
+import { changeUnitResident, updateUnitAdministrative } from '../services/unit.service.js';
+import { changeUnitResidentSchema } from '../schemas/unit.schemas.js';
 import type { NextFunction, Request, Response } from 'express';
 
 export async function listUnits(_req: Request, res: Response) {
@@ -49,4 +50,15 @@ export async function getUnit(req: Request, res: Response, next: NextFunction) {
 export async function listOpenCharges(req: Request, res: Response) {
   const competence = typeof req.query.competence === 'string' ? req.query.competence : undefined;
   res.json({ items: await getUnitOpenCharges(String(req.params.id), { competence }) });
+}
+
+export async function changeResident(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.user) throw new AppError('Unauthorized', 401);
+    const body = changeUnitResidentSchema.parse(req.body);
+    const result = await changeUnitResident(String(req.params.id), body, req.user._id);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
 }
