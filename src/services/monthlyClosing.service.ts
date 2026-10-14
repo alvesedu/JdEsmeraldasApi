@@ -6,6 +6,7 @@ import { AppError } from '../utils/AppError.js';
 import { competenceToDateRange } from '../utils/date.js';
 import { writeAudit } from './audit.service.js';
 import { buildDashboard } from './dashboard.service.js';
+import { assertPeriodOpenStatus } from './financialPeriod.service.js';
 
 type ClosingFilters = { competence?: string; status?: 'OPEN' | 'CLOSED' };
 
@@ -24,11 +25,12 @@ export async function getMonthlyClosing(competence: string) {
 }
 
 export async function upsertMonthlyClosing(competence: string, notes: string | null, userId: Types.ObjectId) {
+  const existing = await MonthlyClosing.findOne({ competence });
+  if (existing) assertPeriodOpenStatus(existing.status, competence);
   const [snapshot, bankSnapshot] = await Promise.all([
     buildDashboard(competence),
     buildBankSnapshot(competence)
   ]);
-  const existing = await MonthlyClosing.findOne({ competence });
   const before = existing?.toObject() ?? null;
   const item = existing ?? new MonthlyClosing({ competence });
   item.set({
@@ -100,6 +102,9 @@ async function buildBankSnapshot(competence: string) {
 export async function updateMonthlyClosing(competence: string, input: { status?: 'OPEN' | 'CLOSED'; notes?: string | null }, userId: Types.ObjectId) {
   const item = await MonthlyClosing.findOne({ competence });
   if (!item) throw new AppError('Monthly closing not found', 404);
+  if (item.status === 'CLOSED' && input.status !== 'OPEN') {
+    assertPeriodOpenStatus(item.status, competence);
+  }
   const before = item.toObject();
   item.set(input);
   await item.save();

@@ -28,6 +28,6 @@ unitSchema.pre('validate', function (next) {
   next();
 });
 
-unitSchema.index({ quadra: 1, numero: 1, tipo: 1 }, { unique: true });
+unitSchema.index({ quadra: 1, numero: 1 }, { unique: true });
 
 export const Unit = model('Unit', unitSchema);

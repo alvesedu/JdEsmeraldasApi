@@ -8,6 +8,7 @@ import { BankImport, type BankImportDocument } from '../models/BankImport.js';
 import { BankTransaction } from '../models/BankTransaction.js';
 import { AppError } from '../utils/AppError.js';
 import { buildTransactionFingerprint, sha256 } from '../utils/hash.js';
+import { assertDatesOpen } from './financialPeriod.service.js';
 
 const maximumPdfSize = 10 * 1024 * 1024;
 
@@ -62,6 +63,7 @@ export async function processBankImport(file: UploadedPdf, userId: Types.ObjectI
       ...transaction,
       fingerprint: buildTransactionFingerprint({ bank: statement.bank, ...transaction })
     }));
+    await assertDatesOpen(transactions.map((transaction) => isoDate(transaction.operationDate ?? transaction.postingDate)));
     const fingerprints = [...new Set(transactions.map((transaction) => transaction.fingerprint))];
     const existingTransactions = await BankTransaction.find({ fingerprint: { $in: fingerprints } })
       .select('fingerprint')

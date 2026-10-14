@@ -4,6 +4,7 @@ import { ExpenseCategory } from '../models/ExpenseCategory.js';
 import { ExpensePaymentAllocation } from '../models/ExpensePaymentAllocation.js';
 import { AppError } from '../utils/AppError.js';
 import { writeAudit } from './audit.service.js';
+import { assertCompetenceOpen } from './financialPeriod.service.js';
 
 export type AccountPayableStatus = 'PENDING' | 'PARTIAL' | 'PAID' | 'CANCELLED';
 
@@ -115,6 +116,7 @@ export async function getAccountPayable(id: string) {
 }
 
 export async function createAccountPayable(input: CreateAccountPayableInput, userId: Types.ObjectId) {
+  await assertCompetenceOpen(input.competence);
   await ensureCategoryExists(input.categoryId);
   const financials = deriveAccountPayableFinancials(input.expectedAmount, 0);
   const item = await AccountPayable.create({
@@ -136,6 +138,8 @@ export async function createAccountPayable(input: CreateAccountPayableInput, use
 export async function updateAccountPayable(id: string, input: UpdateAccountPayableInput, userId: Types.ObjectId) {
   const item = await AccountPayable.findById(id);
   if (!item) throw new AppError('Account payable not found', 404);
+  await assertCompetenceOpen(item.competence);
+  if (input.competence && input.competence !== item.competence) await assertCompetenceOpen(input.competence);
   if (item.status === 'CANCELLED') throw new AppError('Cancelled accounts cannot be edited', 409);
   if (input.categoryId) await ensureCategoryExists(input.categoryId);
   if (input.expectedAmount !== undefined && input.expectedAmount < item.paidAmount) {
@@ -162,6 +166,7 @@ export async function updateAccountPayable(id: string, input: UpdateAccountPayab
 export async function cancelAccountPayable(id: string, userId: Types.ObjectId) {
   const item = await AccountPayable.findById(id);
   if (!item) throw new AppError('Account payable not found', 404);
+  await assertCompetenceOpen(item.competence);
   if (item.status === 'CANCELLED') return item;
 
   const before = item.toObject();
@@ -185,6 +190,7 @@ export async function registerManualPayment(
 ) {
   const item = await AccountPayable.findById(id);
   if (!item) throw new AppError('Account payable not found', 404);
+  await assertCompetenceOpen(item.competence);
   assertManualPaymentAllowed(item.status, input.amount, item.outstandingAmount);
 
   const before = item.toObject();
@@ -223,6 +229,7 @@ export async function reverseManualPayment(
 ) {
   const item = await AccountPayable.findById(accountPayableId);
   if (!item) throw new AppError('Account payable not found', 404);
+  await assertCompetenceOpen(item.competence);
   const payment = await ExpensePaymentAllocation.findOne({
     _id: paymentId,
     accountPayableId: item._id,

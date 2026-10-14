@@ -8,6 +8,7 @@ import { ExpenseCategory } from '../models/ExpenseCategory.js';
 import { AppError } from '../utils/AppError.js';
 import { sha256 } from '../utils/hash.js';
 import { writeAudit } from './audit.service.js';
+import { assertCompetenceOpen } from './financialPeriod.service.js';
 
 type ExpenseFilters = {
   competence?: string;
@@ -68,6 +69,7 @@ export async function listExpenses(filters: ExpenseFilters) {
 }
 
 export async function createExpense(input: Required<Pick<ExpenseInput, 'categoryId' | 'beneficiary' | 'description' | 'competence'>> & ExpenseInput, userId: Types.ObjectId) {
+  await assertCompetenceOpen(input.competence);
   await ensureCategory(input.categoryId);
   await ensureDebitTransaction(input.bankTransactionId ?? null);
   await ensureAvailableTransaction(input.bankTransactionId ?? null);
@@ -87,6 +89,8 @@ export async function createExpense(input: Required<Pick<ExpenseInput, 'category
 export async function updateExpense(id: string, input: ExpenseInput, userId: Types.ObjectId) {
   const item = await Expense.findById(id);
   if (!item) throw new AppError('Expense not found', 404);
+  await assertCompetenceOpen(item.competence);
+  if (input.competence && input.competence !== item.competence) await assertCompetenceOpen(input.competence);
   if (input.categoryId) await ensureCategory(input.categoryId);
   if (input.bankTransactionId !== undefined) await ensureDebitTransaction(input.bankTransactionId);
   if (input.bankTransactionId !== undefined) await ensureAvailableTransaction(input.bankTransactionId, id);
@@ -105,6 +109,7 @@ export async function updateExpense(id: string, input: ExpenseInput, userId: Typ
 export async function deleteExpense(id: string, userId: Types.ObjectId) {
   const item = await Expense.findById(id);
   if (!item) throw new AppError('Expense not found', 404);
+  await assertCompetenceOpen(item.competence);
   await Expense.deleteOne({ _id: item._id });
   await writeAudit({ userId, action: 'EXPENSE_DELETED', entityType: 'Expense', entityId: String(item._id), before: item.toObject() });
   return { deleted: true };

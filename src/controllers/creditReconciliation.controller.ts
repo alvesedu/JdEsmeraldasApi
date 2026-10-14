@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import {
   allocateCredit,
   getCreditReconciliation,
+  linkManualPaymentToCredit,
   listCreditTransactions,
   reversePaymentAllocation
 } from '../services/creditReconciliation.service.js';
@@ -19,6 +20,11 @@ export async function allocate(req: Request, res: Response) {
   if (!req.user) throw new AppError('Unauthorized', 401);
   const result = await allocateCredit(String(req.params.id), req.body, req.user._id);
   res.status(201).json(result);
+}
+
+export async function linkManualPayment(req: Request, res: Response) {
+  if (!req.user) throw new AppError('Unauthorized', 401);
+  res.json(await linkManualPaymentToCredit(String(req.params.id), req.body.allocationId, req.user._id));
 }
 
 export async function reverse(req: Request, res: Response) {

@@ -19,4 +19,8 @@ export const allocateCreditSchema = z.object({
   saveAlias: z.boolean().optional()
 });
 
+export const linkManualAllocationSchema = z.object({
+  allocationId: z.string().min(1)
+});
+
 export const reverseAllocationSchema = z.object({ reason: z.string().trim().min(3).max(500) });

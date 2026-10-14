@@ -95,6 +95,7 @@ describe('credit reconciliation MongoDB transactions', { concurrency: false, ski
     assert.equal(await AuditLog.countDocuments({ action: 'BANK_ALIAS_CREATED' }), 1);
 
     const reversed = await reversePaymentAllocation(String(result.allocations[0]._id), 'Teste de estorno atomico', userId);
+    assert.ok(reversed.transaction);
     assert.equal(reversed.transaction.status, 'PARTIALLY_MATCHED');
     assert.equal(reversed.transaction.remainingAmount, 25_000);
     assert.equal(reversed.charge.status, 'PENDING');

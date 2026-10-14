@@ -8,6 +8,7 @@ import { normalizeBankName } from '../utils/normalize.js';
 import { AppError } from '../utils/AppError.js';
 import { getDatabaseReadiness } from '../config/db.js';
 import { writeAudit } from './audit.service.js';
+import { assertCompetenceOpen, assertCompetencesOpen, assertDatesOpen } from './financialPeriod.service.js';
 
 export type ReconciliationStatus = 'UNMATCHED' | 'PARTIALLY_MATCHED' | 'MATCHED';
 export type ChargeFinancialStatus = 'PENDING' | 'PARTIAL' | 'PAID' | 'PAID_AFTER_REFERENCE_DATE';
@@ -157,9 +158,27 @@ export async function getCreditReconciliation(id: string) {
     aliases: alias ? [alias] : [],
     openCharges,
     suggestedAllocations: suggestAllocations(openCharges, financials.remainingAmount),
+    manualPaymentCandidates: await getManualPaymentCandidates(financials.remainingAmount, suggestedUnitId),
     allocations,
     ...financials
   };
+}
+
+async function getManualPaymentCandidates(remainingAmount: number, unitId: string | null) {
+  if (remainingAmount <= 0) return [];
+  return PaymentAllocation.find({
+    source: 'MANUAL',
+    bankTransactionId: null,
+    reversedAt: null,
+    amount: { $lte: remainingAmount },
+    ...(unitId ? { unitId } : {})
+  })
+    .populate('chargeId', 'competence valueOriginal valuePaid openBalance status')
+    .populate('unitId', 'quadra numero tipo unitKey')
+    .populate('createdBy', 'name email')
+    .sort({ paymentDate: -1, createdAt: -1 })
+    .limit(50)
+    .lean();
 }
 
 export async function getUnitOpenCharges(unitId: string, filters: { competence?: string } = {}) {
@@ -185,6 +204,7 @@ export async function allocateCredit(
     const transaction = await BankTransaction.findById(transactionId).session(session);
     if (!transaction) throw new AppError('Bank transaction not found', 404);
     assertCreditTransaction(transaction.direction);
+    await assertDatesOpen([transaction.operationDate ?? transaction.postingDate]);
 
     const unit = await Unit.findOne({ _id: input.unitId, status: 'ATIVA' }).session(session);
     if (!unit) throw new AppError('Active unit not found', 404);
@@ -198,6 +218,7 @@ export async function allocateCredit(
     if (existingPairs) throw new AppError('An allocation already exists for this transaction and charge', 409);
 
     const paymentDate = transaction.operationDate ?? transaction.postingDate;
+    await assertCompetencesOpen(charges.map((charge) => charge.competence));
     for (const allocation of input.allocations) {
       const charge = charges.find((item) => String(item._id) === allocation.chargeId);
       if (!charge) throw new AppError('Charge not found', 404);
@@ -280,22 +301,83 @@ export async function allocateCredit(
   });
 }
 
+export async function linkManualPaymentToCredit(transactionId: string, allocationId: string, userId: Types.ObjectId) {
+  return runInTransaction(async (session) => {
+    const transaction = await BankTransaction.findById(transactionId).session(session);
+    if (!transaction) throw new AppError('Bank transaction not found', 404);
+    assertCreditTransaction(transaction.direction);
+    await assertDatesOpen([transaction.operationDate ?? transaction.postingDate]);
+
+    const allocation = await PaymentAllocation.findById(allocationId).session(session);
+    if (!allocation) throw new AppError('Payment allocation not found', 404);
+    if (allocation.reversedAt) throw new AppError('Payment allocation is reversed', 409);
+    if (allocation.source !== 'MANUAL') throw new AppError('Only manual payment allocations can be linked', 409);
+    if (allocation.bankTransactionId) throw new AppError('Manual payment allocation is already linked to a bank transaction', 409);
+    const charge = await Charge.findById(allocation.chargeId).session(session);
+    if (!charge) throw new AppError('Charge not found', 404);
+    await assertCompetenceOpen(charge.competence);
+
+    const existingTotal = await activeAllocatedTotal(transaction._id, session);
+    const { remainingAmount } = deriveTransactionFinancials(transaction.amount, existingTotal);
+    if (allocation.amount > remainingAmount) throw new AppError('Manual payment exceeds the transaction remaining amount', 409);
+
+    const beforeAllocation = allocation.toObject();
+    allocation.bankTransactionId = transaction._id;
+    await allocation.save({ session });
+
+    const transactionBefore = transaction.toObject();
+    const totalAfter = existingTotal + allocation.amount;
+    const transactionFinancials = deriveTransactionFinancials(transaction.amount, totalAfter);
+    transaction.processingStatus = transactionFinancials.status;
+    await transaction.save({ session });
+
+    await writeAudit({
+      userId,
+      action: 'MANUAL_PAYMENT_LINKED_TO_BANK_TRANSACTION',
+      entityType: 'PaymentAllocation',
+      entityId: String(allocation._id),
+      before: beforeAllocation,
+      after: allocation.toObject(),
+      session
+    });
+    await writeAudit({
+      userId,
+      action: 'CREDIT_RECONCILED_WITH_MANUAL_PAYMENT',
+      entityType: 'BankTransaction',
+      entityId: String(transaction._id),
+      before: { processingStatus: transactionBefore.processingStatus, allocatedAmount: existingTotal },
+      after: { processingStatus: transaction.processingStatus, allocatedAmount: totalAfter },
+      session
+    });
+
+    return { transaction: { ...transaction.toObject(), ...transactionFinancials }, allocation };
+  });
+}
+
 export async function reversePaymentAllocation(id: string, reason: string, userId: Types.ObjectId) {
   return runInTransaction(async (session) => {
     const allocation = await PaymentAllocation.findById(id).session(session);
     if (!allocation) throw new AppError('Payment allocation not found', 404);
     if (allocation.reversedAt) throw new AppError('Payment allocation is already reversed', 409);
+    const chargeForReversal = await Charge.findById(allocation.chargeId).session(session);
+    if (!chargeForReversal) throw new AppError('Charge not found', 404);
+    await assertCompetenceOpen(chargeForReversal.competence);
 
     const before = allocation.toObject();
     allocation.set({ reversedAt: new Date(), reversedBy: userId, reversalReason: reason });
     await allocation.save({ session });
     const charge = await recalculateCharge(allocation.chargeId, session);
-    const transaction = await BankTransaction.findById(allocation.bankTransactionId).session(session);
-    if (!transaction) throw new AppError('Bank transaction not found', 404);
-    const allocatedAmount = await activeAllocatedTotal(transaction._id, session);
-    const financials = deriveTransactionFinancials(transaction.amount, allocatedAmount);
-    transaction.processingStatus = financials.status;
-    await transaction.save({ session });
+    let transactionResult = null;
+    if (allocation.bankTransactionId) {
+      const transaction = await BankTransaction.findById(allocation.bankTransactionId).session(session);
+      if (!transaction) throw new AppError('Bank transaction not found', 404);
+      await assertDatesOpen([transaction.operationDate ?? transaction.postingDate]);
+      const allocatedAmount = await activeAllocatedTotal(transaction._id, session);
+      const financials = deriveTransactionFinancials(transaction.amount, allocatedAmount);
+      transaction.processingStatus = financials.status;
+      await transaction.save({ session });
+      transactionResult = { ...transaction.toObject(), ...financials };
+    }
 
     await writeAudit({
       userId,
@@ -306,7 +388,7 @@ export async function reversePaymentAllocation(id: string, reason: string, userI
       after: allocation.toObject(),
       session
     });
-    return { allocation, charge, transaction: { ...transaction.toObject(), ...financials } };
+    return { allocation, charge, transaction: transactionResult };
   });
 }
 

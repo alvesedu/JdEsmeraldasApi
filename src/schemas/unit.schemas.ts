@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const unitIdSchema = z.object({ id: z.string().min(1) });
 
 export const createUnitSchema = z.object({
-  quadra: z.string().trim().min(1),
+  quadra: z.string().trim().min(1).transform((value) => value.toLocaleUpperCase('pt-BR')),
   numero: z.string().trim().min(1),
   tipo: z.enum(['CASA', 'LOTE']),
   status: z.enum(['ATIVA', 'INATIVA']).optional()

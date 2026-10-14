@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { Types } from 'mongoose';
-import { updateUnitSchema } from '../schemas/unit.schemas.js';
+import { createUnitSchema, updateUnitSchema } from '../schemas/unit.schemas.js';
 import { updateResidentSchema } from '../schemas/resident.schemas.js';
-import { applyResidentChange, assertResidentCanBeLinked, updateUnitAdministrative } from './unit.service.js';
+import { Unit } from '../models/Unit.js';
+import { applyResidentChange, updateUnitAdministrative } from './unit.service.js';
 import type { AuditInput } from './audit.service.js';
 
 type UnitStatus = 'ATIVA' | 'INATIVA';
@@ -44,6 +45,25 @@ class FakeUnit {
 }
 
 describe('unit patrimonial identity protection', () => {
+  it('normalizes quadra to uppercase when creating a unit', () => {
+    assert.deepEqual(createUnitSchema.parse({ quadra: ' b ', numero: '12', tipo: 'LOTE' }), {
+      quadra: 'B',
+      numero: '12',
+      tipo: 'LOTE'
+    });
+  });
+
+  it('enforces unique unit address by quadra and numero regardless of type', () => {
+    const indexes = Unit.schema.indexes();
+
+    assert.ok(indexes.some(([fields, options]) => (
+      fields.quadra === 1 &&
+      fields.numero === 1 &&
+      !('tipo' in fields) &&
+      options?.unique === true
+    )));
+  });
+
   it('allows updating an administratively editable field', async () => {
     const unit = new FakeUnit();
     const audits: AuditInput[] = [];
@@ -180,7 +200,7 @@ describe('unit resident history changes', () => {
     applyResidentChange(unit, null, joao, startedAt);
 
     assert.equal(String(unit.residentCurrentId), String(joaoId));
-    assert.equal(String(joao.unitId), String(unitId));
+    assert.equal(joao.unitId, null);
     assert.equal(unit.residentHistory.length, 1);
     assert.equal(String(unit.residentHistory[0]?.residentId), String(joaoId));
     assert.equal(unit.residentHistory[0]?.startedAt, startedAt);
@@ -205,8 +225,8 @@ describe('unit resident history changes', () => {
     assert.equal(unit.residentHistory[1]?.startedAt, changedAt);
     assert.equal(unit.residentHistory[1]?.endedAt, null);
     assert.equal(String(unit.residentCurrentId), String(carlosId));
-    assert.equal(joao.unitId, null);
-    assert.equal(String(carlos.unitId), String(unitId));
+    assert.equal(String(joao.unitId), String(unitId));
+    assert.equal(carlos.unitId, null);
   });
 
   it('removes the current resident while preserving previous history', () => {
@@ -220,16 +240,27 @@ describe('unit resident history changes', () => {
     applyResidentChange(unit, joao, null, endedAt);
 
     assert.equal(unit.residentCurrentId, null);
-    assert.equal(joao.unitId, null);
+    assert.equal(String(joao.unitId), String(unitId));
     assert.equal(unit.residentHistory.length, 1);
     assert.equal(unit.residentHistory[0]?.endedAt, endedAt);
   });
 
-  it('rejects moving a resident already linked to another unit', () => {
-    const targetUnitId = new Types.ObjectId();
-    const anotherUnitId = new Types.ObjectId();
+  it('allows the same resident to be current in more than one unit', () => {
+    const firstUnitId = new Types.ObjectId();
+    const secondUnitId = new Types.ObjectId();
+    const joaoId = new Types.ObjectId();
+    const startedAt = new Date('2026-09-01T00:00:00.000Z');
+    const firstUnit = fakeResidentUnit(firstUnitId, joaoId, [{ residentId: joaoId, startedAt, endedAt: null }]);
+    const secondUnit = fakeResidentUnit(secondUnitId);
+    const joao = fakeResident(joaoId, firstUnitId);
 
-    assert.throws(() => assertResidentCanBeLinked({ unitId: anotherUnitId }, String(targetUnitId)), /already linked/);
+    applyResidentChange(secondUnit, null, joao, startedAt);
+
+    assert.equal(String(firstUnit.residentCurrentId), String(joaoId));
+    assert.equal(String(secondUnit.residentCurrentId), String(joaoId));
+    assert.equal(String(joao.unitId), String(firstUnitId));
+    assert.equal(firstUnit.residentHistory.filter((entry) => !entry.endedAt).length, 1);
+    assert.equal(secondUnit.residentHistory.filter((entry) => !entry.endedAt).length, 1);
   });
 
   it('rejects unitId in generic resident update', () => {
@@ -256,17 +287,16 @@ describe('unit resident history changes', () => {
     assert.deepEqual(allocations, [{ unitId, amount: 10_000, reversedAt: null }]);
   });
 
-  it('does not mutate state when a pre-change validation fails', () => {
+  it('does not mutate state when generic resident validation fails before the service call', () => {
     const unitId = new Types.ObjectId();
     const joaoId = new Types.ObjectId();
-    const anotherUnitId = new Types.ObjectId();
     const unit = fakeResidentUnit(unitId);
     const snapshot = structuredClone({
       residentCurrentId: unit.residentCurrentId,
       residentHistory: unit.residentHistory
     });
 
-    assert.throws(() => assertResidentCanBeLinked({ unitId: anotherUnitId }, String(unitId)), /already linked/);
+    assert.throws(() => updateResidentSchema.parse({ name: 'Joao', unitId: String(new Types.ObjectId()) }));
 
     assert.equal(unit.residentCurrentId, snapshot.residentCurrentId);
     assert.deepEqual(unit.residentHistory, snapshot.residentHistory);

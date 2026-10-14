@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   allocate,
   getReconciliation,
+  linkManualPayment,
   listCredits,
   reverse
 } from '../controllers/creditReconciliation.controller.js';
@@ -10,6 +11,7 @@ import { validate } from '../middleware/validate.js';
 import {
   allocateCreditSchema,
   creditFiltersSchema,
+  linkManualAllocationSchema,
   reverseAllocationSchema,
   transactionIdSchema
 } from '../schemas/creditReconciliation.schemas.js';
@@ -23,6 +25,11 @@ bankTransactionRouter.post(
   '/:id/allocate',
   validate({ params: transactionIdSchema, body: allocateCreditSchema }),
   asyncHandler(allocate)
+);
+bankTransactionRouter.post(
+  '/:id/link-manual-payment',
+  validate({ params: transactionIdSchema, body: linkManualAllocationSchema }),
+  asyncHandler(linkManualPayment)
 );
 
 export const paymentAllocationRouter = Router();

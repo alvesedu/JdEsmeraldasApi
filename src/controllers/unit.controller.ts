@@ -16,6 +16,12 @@ export async function listUnits(_req: Request, res: Response) {
 export async function createUnit(req: Request, res: Response, next: NextFunction) {
   try {
     const { quadra, numero, tipo, status } = req.body;
+    const existingUnit = await Unit.findOne({
+      quadra: normalizedAddressPart(quadra),
+      numero: normalizedAddressPart(numero)
+    }).select('_id');
+    if (existingUnit) throw new AppError('Unit with this quadra and number already exists', 409);
+
     const referenceDate = new Date();
     const monthlyValue = await getCurrentPricingValue(tipo, referenceDate);
     const unitKey = buildUnitKey(quadra, numero, tipo);
@@ -24,6 +30,10 @@ export async function createUnit(req: Request, res: Response, next: NextFunction
   } catch (error) {
     next(error);
   }
+}
+
+function normalizedAddressPart(value: string) {
+  return value.trim().toLocaleUpperCase('pt-BR');
 }
 
 export async function updateUnit(req: Request, res: Response, next: NextFunction) {
@@ -38,7 +48,9 @@ export async function updateUnit(req: Request, res: Response, next: NextFunction
 
 export async function getUnit(req: Request, res: Response, next: NextFunction) {
   try {
-    const unit = await Unit.findById(req.params.id).populate('residentCurrentId');
+    const unit = await Unit.findById(req.params.id)
+      .populate('residentCurrentId')
+      .populate('residentHistory.residentId');
     if (!unit) throw new AppError('Unit not found', 404);
     const residents = await Resident.find({ unitId: unit._id }).sort({ createdAt: -1 });
     res.json({ item: unit, residents });

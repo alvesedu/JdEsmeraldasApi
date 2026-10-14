@@ -92,30 +92,23 @@ export async function changeUnitResident(
     if (nextResidentId) {
       nextResident = await Resident.findById(nextResidentId).session(session);
       if (!nextResident) throw new AppError('Resident not found', 404);
-      assertResidentCanBeLinked({ unitId: nextResident.unitId ?? null }, String(unit._id));
-      const anotherCurrentUnit = await Unit.exists({
-        _id: { $ne: unit._id },
-        residentCurrentId: nextResident._id
-      }).session(session);
-      if (anotherCurrentUnit) throw new AppError('Resident is already current in another unit', 409);
     }
 
     if (previousResidentId === nextResidentId) {
       return { item: await unit.populate('residentCurrentId') };
     }
 
-    const previousResident = previousResidentId ? await Resident.findById(previousResidentId).session(session) : null;
     applyResidentChange(
       unit as unknown as ChangeResidentState,
-      previousResident as unknown as ResidentRecordState | null,
+      null,
       nextResident as unknown as ResidentRecordState | null,
       effectiveDate
     );
     assertSingleOpenResidentHistory(unit.residentHistory as unknown as ResidentHistoryEntry[]);
 
-    if (previousResident) await previousResident.save({ session });
-    if (nextResident) await nextResident.save({ session });
     await unit.save({ session });
+    await syncResidentLegacyUnitId(previousResidentId, session);
+    await syncResidentLegacyUnitId(nextResidentId, session);
 
     await writeAudit({
       userId,
@@ -133,7 +126,7 @@ export async function changeUnitResident(
 
 export function applyResidentChange(
   unit: ChangeResidentState,
-  previousResident: ResidentRecordState | null,
+  _previousResident: ResidentRecordState | null,
   nextResident: ResidentRecordState | null,
   effectiveDate: Date
 ) {
@@ -145,20 +138,11 @@ export function applyResidentChange(
     if (!entry.endedAt) entry.endedAt = effectiveDate;
   }
 
-  if (previousResident && previousResident.unitId) previousResident.unitId = null;
-
   if (nextResident) {
     unit.residentHistory.push({ residentId: nextResident._id, startedAt: effectiveDate, endedAt: null });
     unit.residentCurrentId = nextResident._id;
-    nextResident.unitId = unitIdFromHistoryOwner(unit);
   } else {
     unit.residentCurrentId = null;
-  }
-}
-
-export function assertResidentCanBeLinked(resident: { unitId: Types.ObjectId | string | null }, targetUnitId: string) {
-  if (resident.unitId && String(resident.unitId) !== targetUnitId) {
-    throw new AppError('Resident is already linked to another unit', 409);
   }
 }
 
@@ -181,10 +165,6 @@ function pickResidentChangeAuditFields(value: Record<string, unknown>) {
   };
 }
 
-function unitIdFromHistoryOwner(unit: ChangeResidentState) {
-  return unit._id;
-}
-
 async function runInTransaction<T>(work: (session: ClientSession) => Promise<T>) {
   const readiness = await getDatabaseReadiness();
   if (!readiness.supportsTransactions) {
@@ -201,4 +181,18 @@ async function runInTransaction<T>(work: (session: ClientSession) => Promise<T>)
   } finally {
     await session.endSession();
   }
+}
+
+async function syncResidentLegacyUnitId(residentId: string | null, session: ClientSession) {
+  if (!residentId) return;
+  const fallbackUnit = await Unit.findOne({ residentCurrentId: residentId })
+    .select('_id')
+    .sort({ quadra: 1, numero: 1, tipo: 1 })
+    .session(session);
+
+  await Resident.updateOne(
+    { _id: residentId },
+    { $set: { unitId: fallbackUnit?._id ?? null } },
+    { session }
+  );
 }

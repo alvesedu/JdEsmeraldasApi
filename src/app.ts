@@ -16,6 +16,7 @@ import accountPayableRoutes from './routes/accountPayable.routes.js';
 import bankImportRoutes from './routes/bankImport.routes.js';
 import expenseRoutes from './routes/expense.routes.js';
 import monthlyClosingRoutes from './routes/monthlyClosing.routes.js';
+import quickEntryRunRoutes from './routes/quickEntryRun.routes.js';
 import { bankTransactionRouter, paymentAllocationRouter } from './routes/creditReconciliation.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { getDatabaseReadiness } from './config/db.js';
@@ -46,6 +47,7 @@ export function createApp() {
   app.use('/accounts-payable', accountPayableRoutes);
   app.use('/expenses', expenseRoutes);
   app.use('/monthly-closings', monthlyClosingRoutes);
+  app.use('/quick-entry-runs', quickEntryRunRoutes);
   app.use('/bank-imports', bankImportRoutes);
   app.use('/bank-transactions', bankTransactionRouter);
   app.use('/payment-allocations', paymentAllocationRouter);
