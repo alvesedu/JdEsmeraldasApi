@@ -8,8 +8,8 @@ async function bootstrap() {
   await ensureDefaultAdmin();
 
   const app = createApp();
-  app.listen(env.port, () => {
-    console.log(`Backend listening on http://localhost:${env.port}`);
+  app.listen(env.port, '0.0.0.0', () => {
+    console.log(`Backend listening on port ${env.port}`);
   });
 }
 
