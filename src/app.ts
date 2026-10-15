@@ -20,6 +20,7 @@ import quickEntryRunRoutes from './routes/quickEntryRun.routes.js';
 import { bankTransactionRouter, paymentAllocationRouter } from './routes/creditReconciliation.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { getDatabaseReadiness } from './config/db.js';
+import reportRoutes from './routes/report.routes.js';
 
 export function createApp() {
   const app = express();
@@ -41,6 +42,7 @@ export function createApp() {
   app.use('/residents', residentRoutes);
   app.use('/charges', chargeRoutes);
   app.use('/dashboard', dashboardRoutes);
+  app.use('/reports', reportRoutes);
   app.use('/imports', uploadRoutes);
   app.use('/audit', auditRoutes);
   app.use('/lookups', lookupRoutes);
