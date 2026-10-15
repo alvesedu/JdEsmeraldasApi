@@ -152,7 +152,6 @@ async function seedReconciliationCase(prefix: string, transactionAmount: number,
   });
   const bankImport = await BankImport.create({
     originalFileName: `${prefix}.pdf`,
-    storedFilePath: `/tmp/${prefix}.pdf`,
     bank: 'BANCO_DO_BRASIL',
     uploadedBy,
     fileHash: `hash-${prefix}`,

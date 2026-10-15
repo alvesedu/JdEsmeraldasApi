@@ -9,7 +9,6 @@ const integerMoney = {
 const bankImportSchema = new Schema(
   {
     originalFileName: { type: String, required: true, trim: true },
-    storedFilePath: { type: String, required: true, select: false },
     periodStart: { type: Date, default: null },
     periodEnd: { type: Date, default: null },
     bank: { type: String, required: true },

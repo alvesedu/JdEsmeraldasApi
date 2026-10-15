@@ -123,7 +123,6 @@ async function seedUnitResidentCase(prefix: string, uploadedBy: Types.ObjectId) 
 
   const bankImport = await BankImport.create({
     originalFileName: `${prefix}.pdf`,
-    storedFilePath: `/tmp/${prefix}.pdf`,
     bank: 'BANCO_DO_BRASIL',
     uploadedBy,
     fileHash: `unit-resident-hash-${prefix}`,

@@ -1,9 +1,7 @@
-import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Types } from 'mongoose';
 import { parseBankStatement } from '../bankParsers/parserRegistry.js';
 import type { BankParserError, ParsedBankTransaction } from '../bankParsers/types.js';
-import { env } from '../config/env.js';
 import { BankImport, type BankImportDocument } from '../models/BankImport.js';
 import { BankTransaction } from '../models/BankTransaction.js';
 import { AppError } from '../utils/AppError.js';
@@ -24,7 +22,7 @@ type TransactionWithFingerprint = ParsedBankTransaction & { fingerprint: string 
 export async function processBankImport(file: UploadedPdf, userId: Types.ObjectId) {
   validatePdf(file);
   const fileHash = sha256(file.buffer);
-  const existing = await BankImport.findOne({ fileHash }).select('+storedFilePath');
+  const existing = await BankImport.findOne({ fileHash });
   if (
     existing &&
     isDuplicateFileHash(fileHash, existing.fileHash) &&
@@ -33,19 +31,11 @@ export async function processBankImport(file: UploadedPdf, userId: Types.ObjectI
     return { ...serializeBankImport(existing), duplicateFile: true, reprocessed: false };
   }
 
-  const uploadDirectory = path.resolve(env.uploadDir);
-  const storedFilePath = path.join(uploadDirectory, `${fileHash}.pdf`);
-  await mkdir(uploadDirectory, { recursive: true });
-  await writeFile(storedFilePath, file.buffer, { flag: 'wx' }).catch(async (error: unknown) => {
-    if (!isExistingFileError(error)) throw error;
-  });
-
   const reprocessed = Boolean(existing);
   const item =
     existing ??
     (await BankImport.create({
       originalFileName: path.basename(file.originalname),
-      storedFilePath,
       bank: 'UNKNOWN',
       uploadedBy: userId,
       fileHash,
@@ -295,8 +285,4 @@ function serializeBankImport(item: BankImportDocument) {
 
 function isoDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
-}
-
-function isExistingFileError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error && error.code === 'EEXIST';
 }
