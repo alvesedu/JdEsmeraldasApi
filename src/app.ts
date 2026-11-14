@@ -21,6 +21,7 @@ import { bankTransactionRouter, paymentAllocationRouter } from './routes/creditR
 import { errorHandler } from './middleware/errorHandler.js';
 import { getDatabaseReadiness } from './config/db.js';
 import reportRoutes from './routes/report.routes.js';
+import pricingRoutes from './routes/pricing.routes.js';
 
 export function createApp() {
   const app = express();
@@ -46,6 +47,7 @@ export function createApp() {
   app.use('/imports', uploadRoutes);
   app.use('/audit', auditRoutes);
   app.use('/lookups', lookupRoutes);
+  app.use('/pricing-rules', pricingRoutes);
   app.use('/accounts-payable', accountPayableRoutes);
   app.use('/expenses', expenseRoutes);
   app.use('/monthly-closings', monthlyClosingRoutes);
